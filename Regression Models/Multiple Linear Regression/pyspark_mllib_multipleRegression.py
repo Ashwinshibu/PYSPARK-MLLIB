@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
+# Start Spark Session
 import findspark
 findspark.init()
 from pyspark.sql import SparkSession
@@ -13,20 +11,19 @@ spark = SparkSession.builder.master("local[*]").getOrCreate()
 import pandas as pd
 
 
-# In[2]:
+#Load file
 
 
 data = spark.read.csv(r"C:\Users\ABIN\Desktop\PYSPARK MLLIB\Restaurant_Profit_Data.csv", header=True, inferSchema=True)
 
 
-# In[3]:
+#Display few rows
 
 
 data.show()
 
 
-# In[4]:
-
+#Create features storing categorical & numerical variables, omitting the last column
 
 categorical_cols = [item[0] for item in data.dtypes if item[1].startswith('string')]
 print(categorical_cols)
@@ -39,7 +36,10 @@ print(str(len(categorical_cols)) + '  categorical features')
 print(str(len(numerical_cols)) + '  numerical features')
 
 
-# In[5]:
+# First using StringIndexer to convert string/text values into numerical values followed by OneHotEncoderEstimator 
+# Spark MLLibto convert each Stringindexed or transformed values into One Hot Encoded values.
+# VectorAssembler is being used to assemble all the features into one vector from multiple columns that contain type double 
+# Also appending every step of the process in a stages array
 
 
 from pyspark.ml.feature import StringIndexer, OneHotEncoder, VectorAssembler
@@ -59,85 +59,40 @@ stages += [Vectassembler]
 print(stringIndexer.getOutputCol())
 
 
-# In[9]:
+# Using a Spark MLLib pipeline to apply all the stages of transformation
 
 
 from pyspark.ml import Pipeline
 
-
-# In[10]:
-
-
 cols=data.columns
-
-
-# In[11]:
-
 
 cols.show()
 
-
-# In[12]:
-
-
 print(cols)
-
-
-# In[13]:
-
 
 pipeline=Pipeline(stages=stages)
 
-
-# In[16]:
-
-
 pipelineModel=pipeline.fit(data)
-
-
-# In[18]:
-
 
 data=pipelineModel.transform(data)
 
 
-# In[19]:
-
+# Display data
 
 data.show()
-
-
-# In[21]:
-
 
 selected_cols=['features']+cols
 
-
-# In[22]:
-
-
 selected_cols.show()
-
-
-# In[23]:
-
 
 data=data.select(selected_cols)
 
-
-# In[24]:
-
-
 data.show()
-
-
-# In[25]:
-
 
 pd.DataFrame(data.take(5), columns=data.columns)
 
 
-# In[26]:
+#Select only Features and Label from previous dataset as we need these two entities for building machine learning model
 
 
 finalized_data=data.select("features","Profit")
@@ -149,194 +104,165 @@ finalized_data=data.select("features","Profit")
 finalized_data.show()
 
 
-# In[28]:
+#Split the data into training and test model with 70% obs. going in training and 30% in testing
 
 
 train_dataset,test_dataset=finalized_data.randomSplit([0.7,0.3])
 
 
-# In[29]:
+#Import Linear Regression class called LinearRegression
 
 
 from pyspark.ml.regression import LinearRegression
 
 
-# In[30]:
+#Create the Multiple Linear Regression object named linReg  having feature column as features and Label column as Profit
 
 
 linReg=LinearRegression(featuresCol="features",labelCol="Profit")
 
 
-# In[31]:
 
+#Train the model on the training using fit() method.
 
 model=linReg.fit(train_dataset)
 
 
-# In[32]:
+#Predict the Profit on Test Dataset using the evulate method
 
 
 pred=model.evaluate(test_dataset)
 
-
-# In[33]:
-
+#Show the predicted Grade values along side actual Grade values
 
 pred.predictions.show()
-
-
-# In[34]:
-
 
 data.show()
 
 
-# In[35]:
+#Find out coefficient value
 
 
 print(model.coefficients)
 
 
-# In[36]:
+#Find out intercept Value
 
 
 print(model.intercept)
-
-
-# In[37]:
 
 
 coefficient = model.coefficients
 print ("The coefficients of the model are : %a" %coefficient)
 
 
-# In[39]:
-
+#Evaluate the model using metric like Mean Absolute Error(MAE), Root Mean Square Error(RMSE) and R-Square
 
 from pyspark.ml.evaluation import RegressionEvaluator
-
-
-# In[40]:
 
 
 reg=RegressionEvaluator(labelCol="Profit",predictionCol="prediction")
 
 
-# In[41]:
+# root mean square error value
 
 
 rmse=reg.evaluate(pred.predictions,{reg.metricName:"rmse"})
 
-
-# In[42]:
-
-
 print(rmse)
 
 
-# In[50]:
-
+# mean square error value
 
 mse=reg.evaluate(pred.predictions,{reg.metricName:"mae"})
-
-
-# In[51]:
-
 
 print(mse)
 
 
-# In[45]:
+# import numpy
 
 
 import numpy as np
 
 
-# In[48]:
+# root mean square value with numpy
 
 
 rms=np.sqrt(mse)
 
 
-# In[49]:
-
-
 print(rms)
 
 
-# In[52]:
+#  r2 - coefficient of determination
 
 
-rmse=reg.evaluate(pred.predictions,{reg.metricName:"r2"})
+r2=reg.evaluate(pred.predictions,{reg.metricName:"r2"})
+
+print(r2)
 
 
-# In[53]:
-
-
-print(rmse)
-
-
-# In[55]:
+#Display test_dataset
 
 
 test_dataset.show()
 
 
-# In[56]:
+##Create Unlabeled dataset  to contain only feature column
 
 
 unlabeled=test_dataset.select("features")
 
 
-# In[57]:
+# Predict the model output for fresh & unseen test data using transform() method
 
 
 newpredictions=model.transform(unlabeled)
 
 
-# In[58]:
+#Display new predictions
 
 
 newpredictions.show()
 
 
-# In[61]:
+# compare test_dataset and newpredictions
 
 
 newDf=test_dataset.join(newpredictions,on="features")
 
 
-# In[62]:
+#Display newDf
 
 
 newDf.show()
 
 
-# In[81]:
+# add a column diff which is difference between actual profit and prediction
 
 
 newDf= newDf.withColumn("diff",newDf["Profit"] -newDf["prediction"])
 
 
-# In[84]:
+# import absolute function
 
 
 from pyspark.sql.functions import abs
 
 
-# In[85]:
+# make values of diff column absolute values
 
 
 newDf=newDf.withColumn("diff",abs("diff"))
 
 
-# In[86]:
+# Display
 
 
 newDf.show()
 
 
-# In[ ]:
+
 
 
 
